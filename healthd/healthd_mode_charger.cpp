@@ -337,6 +337,9 @@ void Charger::UpdateScreenState(int64_t now) {
 
     disp_time = batt_anim_.frames[batt_anim_.cur_frame].disp_time;
 
+    /* unblank the screen on first cycle and first frame */
+    if (batt_anim_.cur_cycle == 0 && batt_anim_.cur_frame == 0) healthd_draw_->blank_screen(false);
+
     if (screen_blanked_) {
         healthd_draw_->blank_screen(false);
         screen_blanked_ = false;

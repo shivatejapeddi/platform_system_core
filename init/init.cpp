@@ -47,10 +47,15 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <fs_avb/fs_avb.h>
+#include <fs_mgr.h>
+#include <fs_mgr_dm_linear.h>
+#include <fs_mgr_overlayfs.h>
 #include <fs_mgr_vendor_overlay.h>
+
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
+#include <private/android_filesystem_config.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
@@ -91,9 +96,19 @@ using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
 using android::fs_mgr::AvbHandle;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::ReadDefaultFstab;
 
 namespace android {
 namespace init {
+
+namespace {
+bool DeferOverlayfsMount() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    return cmdline.find("androidboot.defer_overlayfs_mount=1") != std::string::npos;
+}
+}
 
 static int property_triggers_enabled = 0;
 
@@ -709,6 +724,20 @@ int SecondStageMain(int argc, char** argv) {
         sigaction(SIGPIPE, &action, nullptr);
     }
 
+    if (DeferOverlayfsMount()) {
+        Fstab fstab;
+        if (ReadDefaultFstab(&fstab)) {
+            fstab.erase(std::remove_if(fstab.begin(), fstab.end(),
+                                       [](const auto& entry) {
+                                           return !entry.fs_mgr_flags.first_stage_mount;
+                                       }),
+                        fstab.end());
+            LOG(INFO) << "Running deferred mounting of overlayfs";
+            fs_mgr_overlayfs_mount_all(&fstab);
+        }
+
+    }
+
     // Set init and its forked children's oom_adj.
     if (auto result =
                 WriteFile("/proc/1/oom_score_adj", StringPrintf("%d", DEFAULT_OOM_SCORE_ADJUST));
@@ -731,6 +760,7 @@ int SecondStageMain(int argc, char** argv) {
     if (force_debuggable_env && AvbHandle::IsDeviceUnlocked()) {
         load_debug_prop = "true"s == force_debuggable_env;
     }
+
     unsetenv("INIT_FORCE_DEBUGGABLE");
 
     // Umount the debug ramdisk so property service doesn't read .prop files from there, when it

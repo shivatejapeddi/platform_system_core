@@ -54,6 +54,8 @@
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
+#include <cutils/properties.h>
+
 #include "action.h"
 #include "action_manager.h"
 #include "builtin_arguments.h"
@@ -426,11 +428,17 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
     UmountStat stat = UmountPartitions(timeout - t.duration());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
-        if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        bool dumpUmountDebugInfo = property_get_bool("persist.sys.dumpUmountDebugInfo",false);
+        if (dumpUmountDebugInfo) {
+            if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        }
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
         UmountStat st = UmountPartitions(0ms);
-        if ((st != UMOUNT_STAT_SUCCESS) && DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        if (dumpUmountDebugInfo) {
+            if ((st != UMOUNT_STAT_SUCCESS) && DUMP_ON_UMOUNT_FAILURE)
+                 DumpUmountDebuggingInfo();
+        }
     }
 
     if (stat == UMOUNT_STAT_SUCCESS && run_fsck) {

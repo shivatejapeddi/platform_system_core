@@ -200,6 +200,7 @@ enum {
      * IMPLEMENTATION_DEFINED, then HALv3 devices will use gralloc usage flags
      * of SW_READ_OFTEN.
      */
+
 #ifndef CAMERA_VENDOR_L_COMPAT
     CAMERA_CMD_SET_VIDEO_FORMAT = 11,
 

@@ -589,6 +589,13 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery.";
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
         return reboot_into_recovery(options);
+    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY_WIPE_PROMPT) {
+        /* Setup a wipe via recovery with prompt, and reboot into recovery if chosen */
+        PLOG(ERROR) << "fs_mgr_mount_all suggested recovery, so wiping data via recovery "
+                       "with prompt.";
+        const std::vector<std::string> options = {"--prompt_and_wipe_data",
+             "--reason=fs_mgr_mount_all" };
+        return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
         if (!FscryptInstallKeyring()) {
@@ -1055,6 +1062,19 @@ static Result<void> do_loglevel(const BuiltinArguments& args) {
     return {};
 }
 
+static int check_rlim_action() {
+    struct rlimit rl;
+    std::string value  = android::base::GetProperty("persist.debug.trace", "");
+    if(value == "1") {
+        rl.rlim_cur = RLIM_INFINITY;
+        rl.rlim_max = RLIM_INFINITY;
+        if (setrlimit(RLIMIT_CORE, &rl) < 0) {
+            PLOG(ERROR) << "could not enable core file generation";
+        }
+    }
+    return 0;
+}
+
 static Result<void> do_load_persist_props(const BuiltinArguments& args) {
     // Devices with FDE have load_persist_props called twice; the first time when the temporary
     // /data partition is mounted and then again once /data is truly mounted.  We do not want to
@@ -1070,6 +1090,8 @@ static Result<void> do_load_persist_props(const BuiltinArguments& args) {
     SendLoadPersistentPropertiesMessage();
 
     start_waiting_for_property("ro.persistent_properties.ready", "true");
+    /*check for coredump*/
+    check_rlim_action();
     return {};
 }
 
